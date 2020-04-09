@@ -1697,6 +1697,7 @@ static void transfer_refer(struct ast_sip_session *session, const char *target)
 	enum ast_control_transfer message = AST_TRANSFER_SUCCESS;
 	pj_str_t tmp;
 	pjsip_tx_data *packet;
+	pjsip_sip_uri *request_uri;
 	const char *ref_by_val;
 	char local_info[pj_strlen(&session->inv_session->dlg->local.info_str) + 1];
 
@@ -1722,6 +1723,22 @@ static void transfer_refer(struct ast_sip_session *session, const char *target)
 		ast_copy_pj_str(local_info, &session->inv_session->dlg->local.info_str, sizeof(local_info));
 		ast_sip_add_header(packet, "Referred-By", local_info);
 	}
+
+	if ((request_uri = packet->msg->line.req.uri)) {
+		pjsip_to_hdr *to_hdr = PJSIP_MSG_TO_HDR(packet->msg);
+		pjsip_sip_uri *to;
+		request_uri = pjsip_uri_get_uri(request_uri);
+		to = pjsip_uri_get_uri(to_hdr->uri);
+		pjstrdup2(packet->pool, &request_uri->host, to->host);
+		ast_debug(1, "Re-wrote URI host to %s\n", request_uri->host);
+		if (to->port) {
+			request_uri->port = to->port;
+			ast_debug(1, "Re-wrote URI port to %d\n", request_uri->port);
+		}
+	}
+
+	//packet->msg->line.req.uri = PJSIP_MSG_TO_HDR(packet->msg)->uri;
+	//pjsip_process_route_set(packet, NULL);
 
 	pjsip_xfer_send_request(sub, packet);
 	ast_queue_control_data(session->channel, AST_CONTROL_TRANSFER, &message, sizeof(message));
